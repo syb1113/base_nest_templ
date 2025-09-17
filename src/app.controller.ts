@@ -38,6 +38,35 @@ export class AppController {
       message: '添加成功',
     };
   }
+
+  @Get('allPos')
+  async allPos() {
+    return await this.redisService.geoList('positions');
+  }
+
+  @Get('pos')
+  async pos(@Query('name') name: string) {
+    return await this.redisService.geoPos('positions', name);
+  }
+
+  @Get('nearbySearch')
+  async nearbySearch(
+    @Query('longitude') longitude: number,
+    @Query('latitude') latitude: number,
+    @Query('radius') radius: number,
+  ) {
+    if (!longitude || !latitude) {
+      throw new BadRequestException('缺少位置信息');
+    }
+    if (!radius) {
+      throw new BadRequestException('缺少搜索半径');
+    }
+    return await this.redisService.getSearch(
+      'positions',
+      [longitude, latitude],
+      radius,
+    );
+  }
   @Get()
   getHello(): string {
     return this.appService.getHello();

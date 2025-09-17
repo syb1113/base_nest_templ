@@ -26,8 +26,21 @@ export class RedisService {
 
   async geoList(key: string) {
     const res = await this.redisClient.zRange(key, 0, -1);
-    return res.map(async (posName) => {
-      await this.geoPos(key, posName);
-    });
+    const promises = res.map((pos) => this.geoPos(key, pos));
+    return Promise.all(promises);
+  }
+
+  async getSearch(key: string, pos: [number, number], radius: number) {
+    const positions = await this.redisClient.geoRadius(
+      key,
+      {
+        longitude: pos[0],
+        latitude: pos[1],
+      },
+      radius,
+      'km',
+    );
+    const promises = positions.map((pos) => this.geoPos(key, pos));
+    return Promise.all(promises);
   }
 }
