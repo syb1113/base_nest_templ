@@ -1,34 +1,36 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Inject,
+  HttpException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-
+import { RedisService } from 'src/redis/redis.service';
 @Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
-  @Post()
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.userService.create(createUserDto);
-  }
+  @Inject()
+  private readonly redisService: RedisService;
+  @Post('login')
+  async login(@Body() loginUserDto: CreateUserDto) {
+    const { email, code } = loginUserDto;
 
-  @Get()
-  findAll() {
-    return this.userService.findAll();
-  }
+    const codeInRedis = await this.redisService.get(`captcha_${email}`);
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.userService.findOne(+id);
-  }
+    if (!codeInRedis) {
+      throw new HttpException('验证码已过期', 201);
+    }
+    if (codeInRedis !== code) {
+      throw new UnauthorizedException('验证码错误');
+    }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.userService.update(+id, updateUserDto);
-  }
+    const user = await this.userService.findUserByEmail(email);
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.userService.remove(+id);
+    console.log(user);
+    return 'success';
   }
 }
