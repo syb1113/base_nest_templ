@@ -1,9 +1,13 @@
+<<<<<<< HEAD
 import { RedisService } from 'src/redis/redis.service';
+=======
+>>>>>>> short_url_service
 import {
   BadRequestException,
   Controller,
   Get,
   Inject,
+<<<<<<< HEAD
   Body,
   HttpStatus,
   Param,
@@ -27,11 +31,20 @@ declare module 'express' {
     };
   }
 }
+=======
+  Param,
+  Query,
+  Redirect,
+} from '@nestjs/common';
+import { AppService } from './app.service';
+import { ShortLongMapService } from './short-long-map.service';
+>>>>>>> short_url_service
 
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
+<<<<<<< HEAD
   @Inject(SessionService)
   private sessionService: SessionService;
 
@@ -54,11 +67,16 @@ export class AppController {
 
     return curCount;
   }
+=======
+  @Inject(ShortLongMapService)
+  private readonly shortLongMapService: ShortLongMapService;
+>>>>>>> short_url_service
 
   @Get()
   getHello(): string {
     return this.appService.getHello();
   }
+<<<<<<< HEAD
   @ApiOperation({ summary: '测试 aaa', description: 'aaa 描述' })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -145,5 +163,26 @@ export class AppController {
       const json = readFileSync('./package.json').toJSON();
       observer.next({ data: { msg: json } });
     });
+=======
+
+  @Get('short-url')
+  async getShortUrl(@Query('url') longUrl: string) {
+    const shortUrl = await this.shortLongMapService.generate(longUrl);
+    const url = `http://192.168.62.129:3000/${shortUrl}`;
+    return url;
+  }
+
+  @Get(':code')
+  @Redirect()
+  async jump(@Param('code') code) {
+    const longUrl = await this.shortLongMapService.getLongUrl(code);
+    if (!longUrl) {
+      throw new BadRequestException('短链不存在');
+    }
+    return {
+      url: longUrl,
+      statusCode: 302,
+    };
+>>>>>>> short_url_service
   }
 }
