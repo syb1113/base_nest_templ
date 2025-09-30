@@ -1,4 +1,11 @@
-import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Query,
+  Headers,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AppService } from './app.service';
 import { randomUUID } from 'crypto';
 import * as qrcode from 'qrcode';
@@ -63,12 +70,26 @@ export class AppController {
   }
   //扫码后用户确认调用
   @Get('qrcode/confirm')
-  confirm(@Query('id') id: string) {
+  async confirm(
+    @Query('id') id: string,
+    @Headers('Authorization') auth: string,
+  ) {
+    let user;
+    try {
+      const [, token] = auth.split(' ');
+      const info = await this.jwtService.verify(token);
+
+      user = this.users.find((item) => item.id == info.userId);
+    } catch (e) {
+      throw new UnauthorizedException('token 过期，请重新登录');
+    }
+
     const info = map.get(`qrcode_${id}`);
     if (!info) {
       throw new BadRequestException('二维码已过期');
     }
     info.status = 'scan-confirm';
+    info.userInfo = user;
     return 'success';
   }
   //扫码后用户取消调用
