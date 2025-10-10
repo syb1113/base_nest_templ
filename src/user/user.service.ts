@@ -5,7 +5,7 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { CreateUserDto } from './dto/create-user.dto';
+import { LoginUserDto } from './dto/login-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { RedisService } from 'src/redis/redis.service';
 import { RegisterUserDto } from './dto/register-user.dto';
@@ -13,6 +13,9 @@ import { User } from './entities/user.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { md5 } from 'src/utils/utils';
+import { Role } from './entities/role.entity';
+import { Permission } from './entities/permission.entity';
+import { LoginUserVo } from './vo/login-user.vo';
 
 @Injectable()
 export class UserService {
@@ -20,8 +23,14 @@ export class UserService {
   @InjectRepository(User)
   private userRepository: Repository<User>;
 
+  @InjectRepository(Role)
+  private roleRepository: Repository<Role>;
+
+  @InjectRepository(Permission)
+  private permissionRepository: Repository<Permission>;
   @Inject(RedisService)
   private redisService: RedisService;
+
   async register(registerUser: RegisterUserDto) {
     const captcha = await this.redisService.get(
       `captcha_${registerUser.email}`,
@@ -60,8 +69,69 @@ export class UserService {
       return '注册失败';
     }
   }
-  create(createUserDto: CreateUserDto) {
-    return 'This action adds a new user';
+  async login(loginUserDto: LoginUserDto, isAdmin: boolean) {
+    const user = await this.userRepository.findOne({
+      where: {
+        username: loginUserDto.username,
+        isAdmin,
+      },
+      relations: ['roles', 'roles.permissions'],
+    });
+
+    if (!user) {
+      throw new HttpException('用户不存在', HttpStatus.BAD_REQUEST);
+    }
+
+    if (user.password !== md5(loginUserDto.password)) {
+      throw new HttpException('密码错误', HttpStatus.BAD_REQUEST);
+    }
+    const vo = new LoginUserVo();
+    vo.userInfo = {
+      id: user.id,
+      username: user.username,
+      nickName: user.nickName,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      headPic: user.headPic,
+      createTime: user.createTime.getTime(),
+      isFrozen: user.isFrozen,
+      isAdmin: user.isAdmin,
+      roles: user.roles.map((item) => item.name),
+      permissions: user?.roles.reduce((arr: Permission[], item) => {
+        item.permissions.forEach((permission) => {
+          if (arr.indexOf(permission) === -1) {
+            arr.push(permission);
+          }
+        });
+        return arr;
+      }, []),
+    };
+    return vo;
+  }
+
+  async findUserById(userId: number, isAdmin: boolean) {
+    const user = await this.userRepository.findOne({
+      where: {
+        id: userId,
+        isAdmin,
+      },
+      relations: ['roles', 'roles.permissions'],
+    });
+
+    return {
+      id: user?.id,
+      username: user?.username,
+      isAdmin: user?.isAdmin,
+      roles: user?.roles.map((item) => item.name),
+      permissions: user?.roles.reduce((arr: Permission[], item) => {
+        item.permissions.forEach((permission) => {
+          if (arr.indexOf(permission) === -1) {
+            arr.push(permission);
+          }
+        });
+        return arr;
+      }, []),
+    };
   }
 
   findAll() {
