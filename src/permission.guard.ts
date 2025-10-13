@@ -17,11 +17,6 @@ export class PermissionGuard implements CanActivate {
     context: ExecutionContext,
   ): boolean | Promise<boolean> | Observable<boolean> {
     const request: Request = context.switchToHttp().getRequest();
-    if (!request.user) {
-      return true;
-    }
-
-    const permissions = request.user.permissions;
 
     const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
       'require-permission',
@@ -30,6 +25,12 @@ export class PermissionGuard implements CanActivate {
     if (!requiredPermissions || requiredPermissions.length === 0) {
       return true;
     }
+
+    if (!request.user) {
+      throw new UnauthorizedException('用户未登录');
+    }
+
+    const permissions = request.user.permissions;
 
     const permissionSet = new Set(permissions.map((p) => p.code));
     const hasAll = requiredPermissions.every((code: string) =>
