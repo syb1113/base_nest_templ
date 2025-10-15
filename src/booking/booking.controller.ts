@@ -12,6 +12,7 @@ import {
 import { BookingService } from './booking.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
+import { RequireLogin, UserInfo } from 'src/custom.decorator';
 
 @Controller('booking')
 export class BookingController {
@@ -38,7 +39,41 @@ export class BookingController {
       bookingTimeRangeEnd,
     );
   }
+  @Post('add')
+  @RequireLogin()
+  async add(
+    @Body() booking: CreateBookingDto,
+    @UserInfo('userId') userId: number,
+  ) {
+    await this.bookingService.add(booking, userId);
+    return 'success';
+  }
+  @Post('approve/:id')
+  @RequireLogin()
+  async approve(@Param('id') id: string) {
+    await this.bookingService.approve(id);
+    return 'success';
+  }
 
+  @Post('reject/:id')
+  @RequireLogin()
+  async reject(@Param('id') id: string) {
+    await this.bookingService.reject(id);
+    return 'success';
+  }
+
+  @Post('cancel/:id')
+  @RequireLogin()
+  async cancel(@Param('id') id: string) {
+    await this.bookingService.cancel(id);
+    return 'success';
+  }
+
+  @Post('urge/:id')
+  @RequireLogin()
+  async urge(@Param('id') id: string) {
+    await this.bookingService.urge(id);
+  }
   @Post()
   create(@Body() createBookingDto: CreateBookingDto) {
     return this.bookingService.create(createBookingDto);

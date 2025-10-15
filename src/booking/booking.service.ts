@@ -1,17 +1,35 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
-import { Between, EntityManager, FindOptionsWhere, Like } from 'typeorm';
-import { InjectEntityManager } from '@nestjs/typeorm';
+import {
+  Between,
+  EntityManager,
+  FindOptionsWhere,
+  LessThanOrEqual,
+  Like,
+  MoreThanOrEqual,
+  Repository,
+} from 'typeorm';
+import { InjectEntityManager, InjectRepository } from '@nestjs/typeorm';
 import { User } from 'src/user/entities/user.entity';
 import { MeetingRoom } from 'src/meeting-room/entities/meeting-room.entity';
 import { Booking } from './entities/booking.entity';
+import { RedisService } from 'src/redis/redis.service';
+import { EmailService } from 'src/email/email.service';
 
 @Injectable()
 export class BookingService {
   @InjectEntityManager()
   private entityManager: EntityManager;
 
+  @InjectRepository(Booking)
+  private repository: Repository<Booking>;
+
+  @Inject(RedisService)
+  private redisService: RedisService;
+
+  @Inject(EmailService)
+  private emailService: EmailService;
   async initData() {
     const user1 = await this.entityManager.findOneBy(User, {
       id: 1,
@@ -133,6 +151,128 @@ export class BookingService {
       }),
       totalCount,
     };
+  }
+  async add(bookingDto: CreateBookingDto, userId: number) {
+    const meetingRoom = await this.entityManager.findOneBy(MeetingRoom, {
+      id: bookingDto.meetingRoomId,
+    });
+
+    if (!meetingRoom) {
+      throw new BadRequestException('会议室不存在');
+    }
+    const user = await this.entityManager.findOneBy(User, {
+      id: userId,
+    });
+    const booking = new Booking();
+    booking.room = meetingRoom;
+    booking.user = user!;
+    booking.startTime = new Date(bookingDto.startTime);
+    booking.endTime = new Date(bookingDto.endTime);
+
+    if (booking.startTime >= booking.endTime) {
+      throw new BadRequestException('开始时间必须早于结束时间');
+    }
+
+    const res = await this.repository.findOne({
+      where: {
+        room: {
+          id: bookingDto.meetingRoomId,
+        },
+        startTime: LessThanOrEqual(booking.endTime),
+        endTime: MoreThanOrEqual(booking.startTime),
+      },
+    });
+    console.log(res);
+
+    if (res) {
+      throw new BadRequestException('会议室已被占用');
+    }
+
+    await this.repository.save(booking);
+
+    return 'success';
+  }
+
+  //通过预订
+  async approve(id: string) {
+    const booking = await this.repository.findOneBy({
+      id,
+    });
+
+    if (!booking) {
+      throw new BadRequestException('预订不存在');
+    }
+
+    booking.status = '审批通过';
+    await this.repository.save(booking);
+
+    return 'success';
+  }
+
+  //拒绝预订
+  async reject(id: string) {
+    const booking = await this.repository.findOneBy({
+      id,
+    });
+
+    if (!booking) {
+      throw new BadRequestException('预订不存在');
+    }
+
+    booking.status = '审批拒绝';
+    await this.repository.save(booking);
+
+    return 'success';
+  }
+
+  //解除预订
+  async cancel(id: string) {
+    const booking = await this.repository.findOneBy({
+      id,
+    });
+
+    if (!booking) {
+      throw new BadRequestException('预订不存在');
+    }
+
+    booking.status = '已解除';
+    await this.repository.save(booking);
+
+    return 'success';
+  }
+
+  //催办
+  async urge(id: string) {
+    const flag = await this.redisService.get('urge_' + id);
+    if (flag) {
+      throw new BadRequestException('半小时内只能催办一次，请耐心等待');
+    }
+    let email = await this.redisService.get('admin_email');
+
+    if (!email) {
+      const admin = await this.entityManager.findOne(User, {
+        select: {
+          email: true,
+        },
+        where: {
+          isAdmin: true,
+        },
+      });
+      if (!admin) {
+        throw new BadRequestException('没有管理员');
+      }
+
+      email = admin.email;
+
+      await this.redisService.set('admin_email', admin.email);
+    }
+
+    await this.emailService.sendMail({
+      to: email,
+      subject: '预定申请催办提醒',
+      html: `id 为 ${id} 的预定申请正在等待审批`,
+    });
+    await this.redisService.set('urge_' + id, 60 * 30);
   }
 
   create(createBookingDto: CreateBookingDto) {

@@ -10,7 +10,7 @@ export class MeetingRoomService {
   @InjectRepository(MeetingRoom)
   private repository: Repository<MeetingRoom>;
 
-  initData() {
+  async initData() {
     const room1 = new MeetingRoom();
     room1.name = '木星';
     room1.capacity = 10;
@@ -29,7 +29,7 @@ export class MeetingRoomService {
     room3.equipment = '白板，电视';
     room3.location = '三层东';
 
-    this.repository.insert([room1, room2, room3]);
+    await this.repository.insert([room1, room2, room3]);
   }
   async find(
     pageNo: number,
